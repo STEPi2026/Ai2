@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0",
+  "student_id": "17",
+  "attempt_id": "attempt-17-02",
+  "analysis_id": "analysis-17-02-1",
+  "analysis_status": "ANALYZED",
+  "focus_skill": {
+    "skill_id": "arithmetic",
+    "name_ko": "사칙연산과 부호 처리",
+    "mastery_after": 0.35,
+    "state_after": "needs_practice"
+  },
+  "first_error": {
+    "step_no": 3,
+    "latex_text": "(+2) \\times (-3) = +6",
+    "error_type": "calculation",
+    "error_subtype": "arithmetic_slip",
+    "misconception_ids": [],
+    "confidence": 0.75
+  },
+  "consecutive_wrong": 2,
+  "hint_count": 0
+}
