@@ -1,0 +1,112 @@
+{
+  "data_source": "fixture",
+  "skills": [
+    {
+      "skill_id": "arithmetic",
+      "name_ko": "사칙연산과 부호 처리",
+      "prerequisites": [],
+      "next_skills": [
+        "polynomial"
+      ],
+      "templates": [
+        "signed_multiplication"
+      ],
+      "explanation_easy": "곱셈에서는 먼저 부호를 정해요. 두 수의 부호가 같으면 양수, 다르면 음수예요. 그다음 절댓값을 곱해요.",
+      "explanation": "곱의 부호는 두 인수의 부호로 결정합니다. 같은 부호의 곱은 양수이고 다른 부호의 곱은 음수입니다.",
+      "example": "(+3) × (-2)는 부호가 다르므로 음수이고, 3 × 2 = 6이므로 -6이에요.",
+      "check_question": "(+4) × (-3)을 계산하세요.",
+      "check_answer": "-12",
+      "answer_form": "integer"
+    },
+    {
+      "skill_id": "polynomial",
+      "name_ko": "다항식의 곱셈",
+      "prerequisites": [
+        "arithmetic"
+      ],
+      "next_skills": [
+        "factoring"
+      ],
+      "templates": [
+        "binomial_expansion"
+      ],
+      "explanation_easy": "앞 괄호의 각 항을 뒤 괄호의 모든 항과 곱해요. 곱한 결과에서 같은 종류의 항끼리 모아요.",
+      "explanation": "분배법칙으로 모든 항의 곱을 구한 뒤 동류항을 정리합니다. 상수항의 곱에서도 부호 규칙을 적용합니다.",
+      "example": "(x+3)(x-2) = x²-2x+3x-6 = x²+x-6",
+      "check_question": "(x+2)(x-1)을 전개하세요. x^2+x-2처럼 입력하세요.",
+      "check_answer": "x**2+x-2",
+      "answer_form": "expanded"
+    },
+    {
+      "skill_id": "factoring",
+      "name_ko": "인수분해",
+      "prerequisites": [
+        "polynomial"
+      ],
+      "next_skills": [],
+      "templates": [],
+      "explanation_easy": "인수분해는 전개를 거꾸로 하는 거예요. 공통으로 들어 있는 인수가 있는지 먼저 살펴봐요.",
+      "explanation": "공통인수를 묶거나 다항식의 곱셈 공식을 역으로 적용하여 다항식을 인수의 곱으로 나타냅니다.",
+      "example": "x²+3x+2 = (x+1)(x+2)",
+      "check_question": "x²+5x+6을 인수분해하세요. (x+2)*(x+3)처럼 입력하세요.",
+      "check_answer": "(x+2)*(x+3)",
+      "answer_form": "factored"
+    }
+  ],
+  "videos": [
+    {
+      "content_id": "fixture-sign-01",
+      "skill_id": "arithmetic",
+      "title": "[테스트 자료] 곱셈의 부호",
+      "url": "https://example.com/stepi/sign",
+      "min_mastery": 0,
+      "max_mastery": 0.6
+    },
+    {
+      "content_id": "fixture-poly-01",
+      "skill_id": "polynomial",
+      "title": "[테스트 자료] 분배법칙",
+      "url": "https://example.com/stepi/polynomial",
+      "min_mastery": 0,
+      "max_mastery": 0.6
+    }
+  ],
+  "diagnostic_questions": [
+    {
+      "question_id": "diag-a1",
+      "skill_id": "arithmetic",
+      "prompt": "(+2) × (-3)을 계산하세요.",
+      "answer": "-6"
+    },
+    {
+      "question_id": "diag-a2",
+      "skill_id": "arithmetic",
+      "prompt": "(-4) × (-2)을 계산하세요.",
+      "answer": "8"
+    },
+    {
+      "question_id": "diag-p1",
+      "skill_id": "polynomial",
+      "prompt": "(x+2)(x-3)을 전개하세요. 곱셈은 *로 입력하세요.",
+      "answer": "x**2-x-6"
+    },
+    {
+      "question_id": "diag-p2",
+      "skill_id": "polynomial",
+      "prompt": "(x+1)(x+4)을 전개하세요.",
+      "answer": "x**2+5*x+4"
+    },
+    {
+      "question_id": "diag-f1",
+      "skill_id": "factoring",
+      "prompt": "x²+3x+2를 인수분해하세요.",
+      "answer": "(x+1)*(x+2)"
+    },
+    {
+      "question_id": "diag-f2",
+      "skill_id": "factoring",
+      "prompt": "x²-x-6을 인수분해하세요.",
+      "answer": "(x+2)*(x-3)"
+    }
+  ]
+}
