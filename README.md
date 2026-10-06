@@ -138,3 +138,16 @@ Issue당 `feature/#이슈번호-기능명` 브랜치, 커밋은 `[이모지 type
 PR은 `[#이슈번호] 작업 내용`으로 관리합니다. main에 직접 Push하지 않습니다.
 이번 작업은 사용자 요청에 따라 별도 비Git 작업 폴더에서 구현·검증 후 Issue와 브랜치에 반영합니다.
 .env·인증키·비밀번호·개인정보를 커밋하지 않습니다. PR 확인 후 Merge하고 작업 브랜치를 삭제합니다.
+
+## 판단 확인 화면
+
+```sh
+python -m pip install -r requirements-dashboard.txt
+python -m streamlit run dashboard/app.py --server.address 127.0.0.1
+```
+
+http://localhost:8501 에서 숙련도·실패·힌트·선수 상태와 정책을 조절합니다.
+입력 변경 시 기본 정책/조정 정책의 Action과 실제 콘텐츠가 자동으로 표시됩니다.
+이 화면은 LearningService를 직접 호출하므로 FastAPI를 별도로 실행할 필요가 없습니다.
+정책 조정은 로컬 화면에만 적용되며 API 설정이나 DB를 변경하지 않습니다.
+터미널에서 서버를 실행한 상태를 유지해야 접속할 수 있습니다.
