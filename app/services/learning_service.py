@@ -11,6 +11,8 @@ from app.services.math_validator import MathValidator
 from app.services.problem_generator import ProblemGenerator, ProblemUnavailable
 from app.services.reward_service import RewardService
 from app.services.tokens import TokenService
+from app.services.planning_service import classify
+from app.models.integration import ErrorRule
 
 
 class LearningService:
@@ -31,6 +33,12 @@ class LearningService:
             next_step=TutorAction.RETRY, next_stage='explanation')
 
     def decide(self, request: LearningRequest) -> LearningResponse:
+        response = self._decide(request)
+        response.data_source = self.catalog.data_source
+        response.focus_mastery_level = classify(request.analysis.focus_skill.mastery_after).level
+        return response
+
+    def _decide(self, request: LearningRequest) -> LearningResponse:
         analysis = request.analysis
         if analysis.analysis_status != 'ANALYZED':
             raise AnalysisUnavailableError("분석이 완료되지 않아 학습 개입을 결정할 수 없습니다.")
@@ -82,6 +90,23 @@ class LearningService:
         if mastery < self.policy.concept_review_threshold:
             return self.review(TutorAction.CONCEPT_REVIEW, current, mastery, '핵심 개념부터 확인해볼까요?')
         if analysis.first_error:
+            error = analysis.first_error
+            rules = [ErrorRule.model_validate(rule) for rule in self.catalog.data.get('error_rules', [])]
+            matching = [rule for rule in rules if
+                (rule.error_type is None or rule.error_type == error.error_type) and
+                (rule.error_subtype is None or rule.error_subtype == error.error_subtype) and
+                (rule.misconception_id is None or rule.misconception_id in error.misconception_ids)]
+            matching.sort(key=lambda rule: -sum(value is not None for value in
+                (rule.error_type, rule.error_subtype, rule.misconception_id)))
+            if matching and matching[0].action == 'SOCRATIC_HINT':
+                if analysis.hint_count < self.policy.max_hint_level:
+                    level, message = self.hints.build(analysis, self.policy.max_hint_level)
+                    return LearningResponse(action_type=TutorAction.SOCRATIC_HINT, target_skill_id=current,
+                        content=LearningContent(message=message, hint_level=level), next_step=TutorAction.RETRY)
+                return self.review(TutorAction.CONCEPT_REVIEW, current, mastery, '힌트를 모두 사용해 개념을 다시 확인해볼까요?')
+            if matching and matching[0].action in ('CONCEPT_REVIEW', 'REMEDIATION'):
+                return self.review(TutorAction(matching[0].action), current, mastery,
+                    '오류·오개념에 지정된 학습 개입으로 사용한 규칙을 확인해볼까요?')
             if repeated_wrong >= self.policy.repeated_wrong_threshold:
                 return self.review(TutorAction.REMEDIATION, current, mastery,
                     '반복해서 어려웠던 계산을 설명과 예제로 나누어 확인해볼까요?')
@@ -109,7 +134,7 @@ class LearningService:
             content = LearningContent(message='예제에서 규칙이 어떻게 쓰이는지 확인해보세요.', example=skill['example'])
             next_stage = 'check'
         else:
-            token = self.tokens.issue('lesson', {'student_id': request.student_id, 'skill_id': request.skill_id})
+            token = self.tokens.issue('lesson', {'student_id': request.student_id, 'skill_id': request.skill_id, 'catalog_id': self.catalog.identity})
             content = LearningContent(message='스스로 확인 문제를 풀어보세요.',
                 check_question=skill['check_question'], problem={'check_token': token})
             next_stage = None
@@ -117,7 +142,15 @@ class LearningService:
             content=content, next_stage=next_stage)
 
     def lesson_answer(self, request: LessonAnswerRequest) -> LearningResponse:
+        response = self._lesson_answer(request)
+        response.answer_correct = response.action_type == TutorAction.PRAISE
+        response.data_source = self.catalog.data_source
+        return response
+
+    def _lesson_answer(self, request: LessonAnswerRequest) -> LearningResponse:
         data = self.tokens.read(request.check_token, 'lesson', request.student_id)
+        if data.get('catalog_id') != self.catalog.identity:
+            raise ValueError('학습 토큰의 Catalog가 변경되어 문제를 다시 발행해야 합니다.')
         skill = self.catalog.skill(data['skill_id'])
         correct = self.validator.matches_task(request.answer, skill['check_answer'], skill['answer_form'])
         return LearningResponse(action_type=TutorAction.PRAISE if correct else TutorAction.CONCEPT_REVIEW,
@@ -127,7 +160,16 @@ class LearningService:
             next_stage='concept_complete' if correct else 'example')
 
     def retry(self, request: RetryRequest) -> LearningResponse:
+        response = self._retry(request)
+        response.answer_correct = any(event.event_type == 'RETRY_SUCCESS' for event in response.events)
+        response.focus_mastery_level = classify(request.mastery_after).level
+        response.data_source = self.catalog.data_source
+        return response
+
+    def _retry(self, request: RetryRequest) -> LearningResponse:
         problem = self.tokens.read(request.problem_token, 'problem', request.student_id)
+        if problem.get('catalog_id') != self.catalog.identity:
+            raise ValueError('문제 토큰의 Catalog가 변경되어 문제를 다시 발행해야 합니다.')
         self.catalog.skill(problem['skill_id'])
         self.catalog.state_map(request.skills)
         a, b = problem['a'], problem['b']

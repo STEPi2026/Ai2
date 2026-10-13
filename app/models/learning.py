@@ -2,6 +2,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 from app.models.tutor_request import TutorRequest
 from app.models.tutor_response import TutorAction
+from app.models.mastery import MasteryLevel
 
 
 class SkillState(BaseModel):
@@ -65,6 +66,8 @@ class LearningResponse(BaseModel):
     next_stage: str | None = None
     events: list[RewardEvent] = Field(default_factory=list)
     data_source: str = "fixture"
+    focus_mastery_level: MasteryLevel | None = None
+    answer_correct: bool | None = None
 
 
 class RetryRequest(BaseModel):

@@ -45,7 +45,7 @@ class ProblemGenerator:
             f"{request.analysis.student_id}:{seed}:{source.template}:{a}:{b}".encode()).hexdigest()[:24]
         token = self.tokens.issue('problem', {'student_id': request.analysis.student_id,
             'skill_id': skill['skill_id'], 'problem_id': problem_id, 'template': source.template,
-            'a': a, 'b': b, 'analysis_id': request.analysis.analysis_id,
+            'a': a, 'b': b, 'catalog_id': self.catalog.identity, 'analysis_id': request.analysis.analysis_id,
             'hint_count': request.analysis.hint_count,
             'has_error': error is not None,
             'misconception_ids': error.misconception_ids if error else []})

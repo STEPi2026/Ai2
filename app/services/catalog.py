@@ -1,4 +1,5 @@
 import json
+import hashlib
 from pathlib import Path
 from app.models.learning import SkillState
 
@@ -8,9 +9,14 @@ class UnknownSkill(ValueError):
 
 
 class FixtureCatalog:
-    def __init__(self, path: Path | None = None):
-        self.data = json.loads((path or Path(__file__).resolve().parents[2] / "data/tutor_fixtures.json").read_text())
+    def __init__(self, path: Path | None = None, data: dict | None = None):
+        self.data = data if data is not None else json.loads((path or Path(__file__).resolve().parents[2] / "data/tutor_fixtures.json").read_text())
+        self.data_source = self.data.get('data_source', 'fixture')
         self.skills = {skill['skill_id']: skill for skill in self.data['skills']}
+
+    @property
+    def identity(self) -> str:
+        return hashlib.sha256(json.dumps(self.data, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
     def skill(self, skill_id: str) -> dict:
         if skill_id not in self.skills:
@@ -80,6 +86,15 @@ class FixtureCatalog:
 
     def video(self, skill_id: str, mastery: float) -> dict[str, str] | None:
         self.skill(skill_id)
+        if self.data_source == 'backend_payload':
+            from app.models.integration import VideoRankRequest, VideoCandidate
+            from app.services.video_service import VideoService
+            ranked = VideoService().rank(VideoRankRequest(skill_id=skill_id, mastery=mastery,
+                candidates=[VideoCandidate.model_validate(v) for v in self.data['videos']], limit=1))
+            if ranked.items:
+                video = ranked.items[0].candidate
+                return {k: str(getattr(video, k)) for k in ['content_id', 'title', 'url']}
+            return None
         for video in self.data['videos']:
             if video['skill_id'] == skill_id and video['min_mastery'] <= mastery <= video['max_mastery']:
                 return {k: str(video[k]) for k in ['content_id', 'title', 'url']}

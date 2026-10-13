@@ -3,11 +3,14 @@ from app.models.learning import SkillState
 from app.services.catalog import FixtureCatalog
 from app.services.math_validator import MathValidator
 from app.services.tokens import TokenService
+from app.policies.diagnostic_policy import DiagnosticPolicy
 
 
 class DiagnosticService:
-    def __init__(self, catalog: FixtureCatalog, validator: MathValidator, tokens: TokenService):
+    def __init__(self, catalog: FixtureCatalog, validator: MathValidator, tokens: TokenService,
+                 policy: DiagnosticPolicy | None = None):
         self.catalog, self.validator, self.tokens = catalog, validator, tokens
+        self.policy = policy or DiagnosticPolicy()
 
     def knowledge_map(self, history: list[dict]) -> list[SkillState]:
         result = []
@@ -19,9 +22,13 @@ class DiagnosticService:
         return result
 
     def select(self, history: list[dict]) -> dict | None:
+        if len(history) >= self.policy.max_questions:
+            return None
         answered = {row['question_id'] for row in history}
+        counts = {s.skill_id: s.evidence_count for s in self.knowledge_map(history)}
         states = {s.skill_id: s.mastery for s in self.knowledge_map(history)}
-        questions = self.catalog.data['diagnostic_questions']
+        questions = [q for q in self.catalog.data['diagnostic_questions']
+                     if counts[q['skill_id']] < self.policy.evidence_per_skill]
         if history and not history[-1]['correct']:
             candidates = [q for q in questions if q['skill_id'] == history[-1]['skill_id'] and q['question_id'] not in answered]
             if candidates:
@@ -30,7 +37,7 @@ class DiagnosticService:
         for question in questions:
             skill = self.catalog.skill(question['skill_id'])
             if question['question_id'] not in answered and all(
-                states.get(p) is not None and states[p] >= 0.5 for p in skill['prerequisites']):
+                states.get(p) is not None and states[p] >= self.policy.prerequisite_threshold for p in skill['prerequisites']):
                 return question
         return None
 
@@ -39,14 +46,16 @@ class DiagnosticService:
         return DiagnosticResponse(completed=question is None,
             question={k: question[k] for k in ['question_id', 'skill_id', 'prompt']} if question else None,
             session_token=self.tokens.issue('diagnostic', {'student_id': student_id, 'history': history,
-                'question_id': question['question_id']}) if question else None,
-            knowledge_map=self.knowledge_map(history), answered_count=len(history), last_correct=last_correct)
+                'question_id': question['question_id'], 'catalog_id': self.catalog.identity}) if question else None,
+            knowledge_map=self.knowledge_map(history), answered_count=len(history), last_correct=last_correct, data_source=self.catalog.data_source)
 
     def start(self, student_id: str) -> DiagnosticResponse:
         return self.response(student_id, [])
 
     def answer(self, request: DiagnosticAnswer) -> DiagnosticResponse:
         data = self.tokens.read(request.session_token, 'diagnostic', request.student_id)
+        if data.get('catalog_id') != self.catalog.identity:
+            raise ValueError('진단 자료가 변경되어 진단을 다시 시작해야 합니다.')
         if data['question_id'] != request.question_id:
             raise ValueError("현재 진단문제와 question_id가 다릅니다.")
         question = next(q for q in self.catalog.data['diagnostic_questions'] if q['question_id'] == request.question_id)

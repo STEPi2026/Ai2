@@ -93,3 +93,103 @@ with right:
         st.error(str(exc))
 
 st.caption("값을 바꾸면 자동으로 다시 판단합니다. 실제 학습 효과를 검증한 결과가 아니라 현재 규칙의 동작을 확인하는 화면입니다.")
+
+
+st.divider()
+st.header("학습경로·상태 갱신·영상 실험")
+st.caption("아래 실험은 화면 안의 가상 학생 상태만 변경하며 Backend DB에는 저장하지 않습니다.")
+from app.models.learning import SkillState
+from app.models.planning import PlanningRequest, StateUpdateRequest
+from app.policies.planning_policy import PlanningPolicy
+from app.services.planning_service import PlanningService, classify
+from app.models.integration import VideoRankRequest, VideoCandidate
+from app.services.video_service import VideoService
+
+path_tab, update_tab, video_tab = st.tabs(["학습경로·숙련도", "학습 후 상태 갱신", "영상 후보 Ranking"])
+with path_tab:
+    st.caption("숙련도 단계: 0.2 / 0.4 / 0.6 / 0.8 경계로 기초 시작 → 기초 이해 → 발전 중 → 능숙 → 숙달")
+    if 'map_skills' not in st.session_state:
+        st.session_state.map_skills = [SkillState(skill_id=value, mastery=0.35).model_dump() for value in catalog.skills]
+        st.session_state.map_version = 0
+        st.session_state.map_applied = []
+    roadmap_states = []
+    for value in catalog.skills:
+        with st.container():
+            amount = st.slider(catalog.skill(value)['name_ko'] + " 숙련도", 0.0, 1.0, 0.35, 0.05, key='map_' + value)
+            unknown = st.checkbox(catalog.skill(value)['name_ko'] + " 미진단", key='unknown_' + value)
+            roadmap_states.append(SkillState(skill_id=value, mastery=None if unknown else amount))
+    goals = st.multiselect("목표 Skill (비우면 전체)", list(catalog.skills), default=['factoring'],
+                           format_func=lambda value: catalog.skill(value)['name_ko'])
+    planner = PlanningService(catalog)
+    path_request = PlanningRequest(student_id='dashboard-student', skills=roadmap_states, goal_skill_ids=goals,
+                                  previous_roadmap_id=st.session_state.get('previous_roadmap'))
+    path = planner.plan(path_request)
+    st.dataframe([{'Skill': catalog.skill(item.skill_id)['name_ko'],
+                   '숙련도': item.mastery, '단계': classify(item.mastery).label_ko,
+                   '우선순위 점수': item.score, '바로 학습 가능': item.ready,
+                   '근거': ' / '.join(item.reasons)} for item in path.priorities], hide_index=True)
+    if path.priorities:
+        st.bar_chart({catalog.skill(item.skill_id)['name_ko']: item.score for item in path.priorities})
+    for step in path.steps:
+        st.write(f"{step.order}. {catalog.skill(step.skill_id)['name_ko']} — {step.kind}")
+    if path.completed:
+        st.success("선택한 목표와 선수 Skill이 모두 숙달 기준을 충족합니다.")
+    else:
+        st.info("다음 학습: " + catalog.skill(path.next_skill_id)['name_ko'])
+    if st.button("이 상태로 가상 Knowledge Map 설정"):
+        st.session_state.map_skills = [item.model_dump() for item in roadmap_states]
+        st.session_state.map_version = 0
+        st.session_state.map_applied = []
+        st.session_state.previous_roadmap = path.roadmap_id
+        st.success("상태 갱신 실험의 시작 상태를 설정했습니다.")
+
+with update_tab:
+    st.caption("정답은 숙련도를 올리고 오답은 낮춥니다. 힌트 사용 정답은 더 적게 반영하는 초기 제안 정책입니다.")
+    update_skill = st.selectbox("결과를 반영할 Skill", list(catalog.skills), key='update_skill',
+                                format_func=lambda value: catalog.skill(value)['name_ko'])
+    answer_correct = st.checkbox("정답으로 확인됨", True)
+    answer_hint = st.checkbox("힌트 사용 후 정답")
+    attempt_id = st.text_input("시도 ID (새 시도에는 새 ID)", 'dashboard-attempt-1')
+    gain = st.slider("정답 반영률", 0.05, 0.5, 0.15, 0.05)
+    penalty = st.slider("오답 감쇠율", 0.05, 0.5, 0.1, 0.05)
+    hint_weight = st.slider("힌트 사용 정답 반영 비율", 0.1, 1.0, 0.5, 0.1)
+    if st.button("가상 학생 상태에 결과 반영"):
+        try:
+            update_service = PlanningService(catalog, PlanningPolicy(success_gain=gain, wrong_penalty=penalty, hint_weight=hint_weight))
+            proposal = update_service.update(StateUpdateRequest(student_id='dashboard-student',
+                expected_version=st.session_state.map_version,
+                skills=st.session_state.map_skills, applied_attempt_ids=st.session_state.map_applied,
+                observation={'attempt_id': attempt_id, 'skill_id': update_skill,
+                             'correct': answer_correct, 'used_hint': answer_hint}))
+            st.session_state.map_skills = [item.model_dump() for item in proposal.skills]
+            st.session_state.map_version = proposal.proposed_version
+            if proposal.applied:
+                st.session_state.map_applied.append(attempt_id)
+                st.success(f"가상 상태 반영: {proposal.changed_skill.mastery:.3f} ({proposal.changed_skill.label_ko})")
+            else:
+                st.info("이미 반영한 시도라 다시 증가시키지 않았습니다.")
+        except (ValueError, ValidationError) as exc:
+            st.error(str(exc))
+    mapped = [SkillState.model_validate(item) for item in st.session_state.map_skills]
+    st.dataframe([{'Skill': catalog.skill(item.skill_id)['name_ko'], '숙련도': item.mastery,
+                   '단계': classify(item.mastery).label_ko, '반영한 결과 수': item.evidence_count} for item in mapped], hide_index=True)
+    after_path = planner.plan(PlanningRequest(student_id='dashboard-student', skills=mapped,
+        goal_skill_ids=goals, previous_roadmap_id=st.session_state.get('previous_roadmap')))
+    st.write("갱신 후 학습경로:", ' → '.join(catalog.skill(step.skill_id)['name_ko'] for step in after_path.steps) or '목표 달성')
+
+with video_tab:
+    st.caption("실제 영상 조회는 수행하지 않습니다. 아래 URL은 테스트 자료이며 후보 점수·제외 조건을 확인합니다.")
+    approved_demo = st.checkbox("테스트 영상 후보를 승인된 자료로 가정", False)
+    candidates = [VideoCandidate(content_id=f'demo-video-{i}', skill_id=skill_id,
+        title=title, url=f'https://example.com/demo-video-{i}', approved=approved_demo,
+        min_mastery=minimum, max_mastery=maximum, quality_score=quality, duration_seconds=duration)
+        for i, (title, minimum, maximum, quality, duration) in enumerate([
+            ('기초 규칙 짧은 설명', 0, 0.4, 0.8, 180), ('예제로 적용하기', 0.2, 0.7, 0.9, 480),
+            ('응용 문제 설명', 0.6, 1.0, 0.85, 600)])]
+    ranked = VideoService().rank(VideoRankRequest(skill_id=skill_id, mastery=mastery, candidates=candidates))
+    if ranked.items:
+        st.dataframe([{'순위': i + 1, '제목': item.candidate.title, '점수': item.score,
+                       '길이(초)': item.candidate.duration_seconds, '근거': ' / '.join(item.reasons)}
+                      for i, item in enumerate(ranked.items)], hide_index=True)
+    else:
+        st.info("현재 수준과 승인 조건을 충족하는 영상 후보가 없습니다.")
