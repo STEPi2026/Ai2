@@ -1,0 +1,48 @@
+{
+  "analysis": {
+    "schema_version": "1.0",
+    "student_id": "17",
+    "attempt_id": "attempt-17-02",
+    "analysis_id": "analysis-17-02-1",
+    "analysis_status": "ANALYZED",
+    "focus_skill": {
+      "skill_id": "arithmetic",
+      "name_ko": "사칙연산과 부호 처리",
+      "mastery_after": 0.35,
+      "state_after": "needs_practice"
+    },
+    "first_error": {
+      "step_no": 3,
+      "latex_text": "(+2) \\times (-3) = +6",
+      "error_type": "calculation",
+      "error_subtype": "arithmetic_slip",
+      "misconception_ids": [],
+      "confidence": 0.75
+    },
+    "consecutive_wrong": 2,
+    "hint_count": 0
+  },
+  "skills": [
+    {
+      "skill_id": "arithmetic",
+      "mastery": 0.35,
+      "evidence_count": 2
+    }
+  ],
+  "stage": "decision",
+  "source_problem": {
+    "template": "signed_multiplication",
+    "a": 2,
+    "b": -3,
+    "difficulty": "easy"
+  },
+  "recent_attempts": [
+    {
+      "attempt_id": "attempt-17-01",
+      "skill_id": "arithmetic",
+      "correct": false,
+      "error_subtype": "arithmetic_slip",
+      "used_hint": false
+    }
+  ]
+}
